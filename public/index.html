@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Screenshot API Dashboard</title>
+<style>
+    :root{--bg:#0f172a;--panel:#1e293b;--muted:#64748b;--fg:#e2e8f0;--accent:#38bdf8;--ok:#22c55e;--err:#ef4444;--border:#334155}
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+    header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--panel)}
+    header h1{font-size:18px;margin:0}
+    header .actions{display:flex;gap:8px;align-items:center}
+    main{padding:24px;max-width:1400px;margin:0 auto}
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
+    .stat{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px}
+    .stat .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+    .stat .value{font-size:24px;font-weight:600;margin-top:6px}
+    .toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+    button,select,input{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 12px;cursor:pointer}
+    button:hover{border-color:var(--accent)}
+    button.primary{background:var(--accent);color:#0f172a;border-color:var(--accent);font-weight:600}
+    button.danger{background:var(--err);color:#fff;border-color:var(--err)}
+    button.danger:hover{opacity:.9}
+    table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+    th{background:#0b1220;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+    tr:last-child td{border-bottom:none}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
+    .pill.success{background:rgba(34,197,94,.15);color:var(--ok)}
+    .pill.failed{background:rgba(239,68,68,.15);color:var(--err)}
+    .thumbs{display:flex;gap:4px;flex-wrap:wrap;max-width:220px}
+    .thumbs img{width:48px;height:32px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:pointer}
+    .url{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace;font-size:12px}
+    .muted{color:var(--muted);font-size:12px}
+    .login{max-width:360px;margin:10vh auto;background:var(--panel);padding:24px;border-radius:8px;border:1px solid var(--border)}
+    .login h2{margin:0 0 16px;font-size:18px}
+    .login input{width:100%;margin-bottom:12px}
+    .login button{width:100%}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:10}
+    .modal.open{display:flex}
+    .modal img{max-width:95vw;max-height:95vh;border-radius:6px}
+    .empty{padding:40px;text-align:center;color:var(--muted)}
+    .row-actions{display:flex;gap:6px}
+    .row-actions button{padding:4px 10px;font-size:12px}
+    .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
+    .tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:10px 16px;color:var(--muted);font-weight:600}
+    .tab:hover{color:var(--fg);border-color:transparent}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+    .doc{max-width:900px}
+    .doc h2{font-size:20px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+    .doc h2:first-child{margin-top:0}
+    .doc h3{font-size:15px;margin:20px 0 8px;color:var(--accent)}
+    .doc p,.doc li{color:var(--fg)}
+    .doc ul,.doc ol{padding-left:22px}
+    .doc li{margin:4px 0}
+    .doc code{font-family:ui-monospace,monospace;font-size:12px;background:#0b1220;border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+    .doc pre{background:#0b1220;border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto}
+    .doc pre code{background:none;border:none;padding:0;font-size:12.5px;line-height:1.55}
+    .doc table{margin:8px 0}
+    .doc td,.doc th{font-size:13px}
+    .doc .lead{color:var(--muted);font-size:14px}
+    .badge{display:inline-block;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:8px}
+    .badge.get{background:rgba(34,197,94,.15);color:var(--ok)}
+    .badge.post{background:rgba(56,189,248,.15);color:var(--accent)}
+    .badge.del{background:rgba(239,68,68,.15);color:var(--err)}
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="login" style="display:none">
+    <h2>Screenshot API Dashboard</h2>
+    <input id="key-input" type="password" placeholder="Enter API key" autocomplete="off" />
+    <button class="primary" onclick="login()">Sign in</button>
+    <div id="login-err" class="muted" style="color:var(--err);margin-top:8px;display:none">Invalid API key</div>
+</div>
+
+<div id="app" style="display:none">
+    <header>
+        <h1>📸 Screenshot API Dashboard</h1>
+        <div class="actions">
+            <button onclick="refresh()">↻ Refresh</button>
+            <button class="danger" onclick="logout()">Sign out</button>
+        </div>
+    </header>
+    <main>
+        <nav class="tabs">
+            <button class="tab active" data-tab="jobs" onclick="switchTab('jobs')">Jobs</button>
+            <button class="tab" data-tab="document" onclick="switchTab('document')">Document</button>
+        </nav>
+
+        <section id="tab-jobs" class="tab-panel active">
+        <div id="stats" class="stats"></div>
+
+        <div class="toolbar">
+            <select id="filter-status" onchange="loadJobs()">
+                <option value="">All statuses</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+            </select>
+            <select id="filter-limit" onchange="loadJobs()">
+                <option value="25">Last 25</option>
+                <option value="50" selected>Last 50</option>
+                <option value="100">Last 100</option>
+                <option value="250">Last 250</option>
+            </select>
+            <button onclick="cleanup(7)">Cleanup &gt; 7 days</button>
+            <button onclick="cleanup(1)">Cleanup &gt; 1 day</button>
+            <button class="danger" onclick="deleteAll()">Delete ALL</button>
+        </div>
+
+        <table id="jobs-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>URL</th>
+                    <th>Sections</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Size</th>
+                    <th>Previews</th>
+                    <th>Client</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="jobs-body"></tbody>
+        </table>
+        </section>
+
+        <section id="tab-document" class="tab-panel">
+        <div class="doc">
+            <h2>Screenshot API — How We Use It</h2>
+            <p class="lead">A standalone Node + Puppeteer HTTP service that captures website screenshots on demand. It runs on a Hostinger VPS and is called by the <code>agents-dashboard</code> WordPress plugin, which is hosted on Kinsta where <code>shell_exec</code> (and therefore a local headless Chrome) is blocked. This service moves the heavy, browser-driven work off WordPress and onto a box that can run Chromium.</p>
+
+            <h2>Why this service exists</h2>
+            <ul>
+                <li><strong>Kinsta can't run Chrome.</strong> The WP plugin needs full-page and section screenshots, but Kinsta's managed environment blocks <code>shell_exec</code>, so Puppeteer/Chromium can't launch there.</li>
+                <li><strong>Offload to a VPS.</strong> This API runs Chromium on a Hostinger VPS (≥2&nbsp;GB RAM) and exposes a simple authenticated HTTP endpoint.</li>
+                <li><strong>Reuse &amp; speed.</strong> A single browser instance is kept alive across requests, and concurrency is capped so the box doesn't run out of memory (~500&nbsp;MB per concurrent Chrome).</li>
+            </ul>
+
+            <h2>How a request flows</h2>
+            <ol>
+                <li>The WP plugin sends <code>POST /screenshot</code> with the target <code>url</code>, a list of <code>sections</code>, and the <code>x-api-key</code> header.</li>
+                <li>The request is queued through a concurrency limiter (<code>MAX_CONCURRENCY</code>, default 2).</li>
+                <li>Puppeteer opens the page, waits <code>waitTime</code> ms for content to settle, then captures each requested section.</li>
+                <li>PNGs are written to disk under <code>SCREENSHOT_DIR/&lt;jobId&gt;/</code> and a job record is saved to the JSON store.</li>
+                <li>The response returns the <code>jobId</code> and a list of public file URLs (served from <code>/files/&lt;jobId&gt;/&lt;filename&gt;</code>).</li>
+            </ol>
+
+            <h2>Endpoints</h2>
+
+            <h3><span class="badge get">GET</span> /health</h3>
+            <p>Unauthenticated health check. Returns <code>{ ok: true, queued: N }</code> where <code>queued</code> is active + pending capture jobs.</p>
+
+            <h3><span class="badge post">POST</span> /screenshot</h3>
+            <p>Requires the <code>x-api-key</code> header (or <code>?api_key=</code> query param). Request body:</p>
+            <pre><code>{
+  "url": "https://example.com",
+  "sections": ["full", "hero", "slider", "map", "footer"],
+  "viewport": { "width": 1920, "height": 1080 },
+  "waitTime": 3000,
+  "timeout": 60000
+}</code></pre>
+            <p>Response:</p>
+            <pre><code>{
+  "jobId": "abc123",
+  "files": [
+    {
+      "section": "full",
+      "filename": "full-page.png",
+      "url": "https://host/files/abc123/full-page.png"
+    }
+  ]
+}</code></pre>
+            <p class="muted">Notes: <code>url</code> must start with <code>http://</code> or <code>https://</code>. <code>waitTime</code> is clamped to 0–15000&nbsp;ms and <code>timeout</code> to 5000–120000&nbsp;ms. If no sections are given, it defaults to <code>["full"]</code>. A job is recorded even on failure so it shows up in the dashboard.</p>
+
+            <h3><span class="badge get">GET</span> /files/:jobId/:filename</h3>
+            <p>Static access to the captured PNGs (cached for 1 day).</p>
+
+            <h3>Dashboard API <span class="muted">(all require <code>x-api-key</code>)</span></h3>
+            <ul>
+                <li><span class="badge get">GET</span> <code>/api/stats</code> — totals, today/week counts, failures, avg duration, disk usage.</li>
+                <li><span class="badge get">GET</span> <code>/api/jobs?limit=&amp;offset=&amp;status=</code> — paginated job history.</li>
+                <li><span class="badge get">GET</span> <code>/api/jobs/:id</code> — a single job record.</li>
+                <li><span class="badge del">DELETE</span> <code>/api/jobs/:id</code> — delete a job and its files.</li>
+                <li><span class="badge post">POST</span> <code>/api/jobs/cleanup</code> — body <code>{ "olderThanDays": 7 }</code>, prunes old jobs.</li>
+                <li><span class="badge del">DELETE</span> <code>/api/jobs</code> — delete ALL jobs and files.</li>
+            </ul>
+
+            <h2>Sections we capture</h2>
+            <p>The <code>sections</code> array picks what to grab. Each maps to a capture strategy in <code>src/screenshot.js</code>:</p>
+            <table>
+                <thead><tr><th>Section</th><th>What it captures</th><th>How</th></tr></thead>
+                <tbody>
+                    <tr><td><code>full</code></td><td>Whole page</td><td>Full-page screenshot</td></tr>
+                    <tr><td><code>hero</code></td><td>Top hero area</td><td>Viewport clip from y=0, 900px tall</td></tr>
+                    <tr><td><code>slider</code></td><td>Services slider</td><td>Element: <code>#find-services, .services-sec, .looking-for-today-slider</code></td></tr>
+                    <tr><td><code>map</code></td><td>US map</td><td>Element: <code>#vmap, .us-map, [class*="map-section"], .state-map</code></td></tr>
+                    <tr><td><code>footer</code></td><td>Page footer</td><td>Element: <code>footer, .elementor-location-footer, [data-elementor-type="footer"]</code></td></tr>
+                </tbody>
+            </table>
+            <p class="muted">For element sections, the service tries each selector in order and uses the first match. If nothing matches, that section is reported as <code>element_not_found</code> but the rest of the job still runs.</p>
+
+            <h2>Example call</h2>
+            <pre><code>curl -X POST https://your-domain/screenshot \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_KEY" \
+  -d '{"url":"https://example.com","sections":["full","hero","footer"]}'</code></pre>
+
+            <h2>Configuration</h2>
+            <p>Set via <code>.env</code> on the VPS:</p>
+            <table>
+                <thead><tr><th>Variable</th><th>Purpose</th><th>Default</th></tr></thead>
+                <tbody>
+                    <tr><td><code>API_KEY</code></td><td>Shared secret for all authenticated calls</td><td><em>required</em></td></tr>
+                    <tr><td><code>PORT</code></td><td>HTTP port</td><td><code>3000</code></td></tr>
+                    <tr><td><code>PUBLIC_BASE_URL</code></td><td>Base URL used to build file links</td><td><code>http://localhost:PORT</code></td></tr>
+                    <tr><td><code>MAX_CONCURRENCY</code></td><td>Max simultaneous Chrome captures</td><td><code>2</code></td></tr>
+                    <tr><td><code>SCREENSHOT_DIR</code></td><td>Where PNGs are stored</td><td><code>./screenshots</code></td></tr>
+                    <tr><td><code>DATA_DIR</code></td><td>Where the job store lives</td><td><code>./data</code></td></tr>
+                    <tr><td><code>REQUEST_TIMEOUT_MS</code></td><td>Default page-load timeout</td><td><code>60000</code></td></tr>
+                </tbody>
+            </table>
+
+            <h2>Deployment (Hostinger VPS)</h2>
+            <ol>
+                <li>Use a VPS plan with ≥2&nbsp;GB RAM (Chrome is memory-hungry).</li>
+                <li>Install Node 20+ and the Chromium system dependencies (see <code>README.md</code> for the full <code>apt</code> list).</li>
+                <li>Upload this folder, copy <code>.env.example</code> → <code>.env</code>, and set <code>API_KEY</code>, <code>PUBLIC_BASE_URL</code>, <code>PORT</code>.</li>
+                <li>Run <code>npm ci --omit=dev</code>, then start under PM2: <code>pm2 start ecosystem.config.js &amp;&amp; pm2 save &amp;&amp; pm2 startup</code>.</li>
+                <li>Put nginx + Let's Encrypt in front for HTTPS and rate limiting (recommended).</li>
+            </ol>
+
+            <h2>Operational notes</h2>
+            <ul>
+                <li>The browser instance is reused across requests for speed; raise <code>MAX_CONCURRENCY</code> only if RAM allows.</li>
+                <li>Screenshots persist on disk — use the dashboard <strong>Cleanup</strong> buttons or a cron job to prune old jobs and keep disk usage down.</li>
+                <li>Every request (success or failure) is logged to the job store and visible in the <strong>Jobs</strong> tab, with thumbnails, duration, size, and client IP.</li>
+            </ul>
+        </div>
+        </section>
+    </main>
+</div>
+
+<div id="modal" class="modal" onclick="this.classList.remove('open')">
+    <img id="modal-img" src="" alt="" />
+</div>
+
+<script>
+const KEY_STORE = 'screenshot-api-key';
+let apiKey = localStorage.getItem(KEY_STORE) || '';
+
+async function api(path, opts = {}) {
+    const res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, ...(opts.headers || {}) },
+    });
+    if (res.status === 401) { showLogin(true); throw new Error('unauthorized'); }
+    return res.json();
+}
+
+function showLogin(err = false) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'block';
+    document.getElementById('login-err').style.display = err ? 'block' : 'none';
+}
+function showApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+}
+async function login() {
+    const k = document.getElementById('key-input').value.trim();
+    if (!k) return;
+    apiKey = k;
+    try {
+        await api('/api/stats');
+        localStorage.setItem(KEY_STORE, k);
+        showApp();
+        refresh();
+    } catch { showLogin(true); }
+}
+function logout() { localStorage.removeItem(KEY_STORE); apiKey = ''; showLogin(); }
+
+function fmtBytes(b) {
+    if (!b) return '0 B';
+    const u = ['B','KB','MB','GB']; let i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return b.toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+function fmtDuration(ms) { return ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's'; }
+function fmtTime(iso) {
+    const d = new Date(iso); const now = new Date();
+    const diff = (now - d) / 1000;
+    if (diff < 60) return Math.floor(diff) + 's ago';
+    if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+    return d.toLocaleString();
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function loadStats() {
+    const s = await api('/api/stats');
+    document.getElementById('stats').innerHTML = `
+        <div class="stat"><div class="label">Total requests</div><div class="value">${s.total}</div></div>
+        <div class="stat"><div class="label">Today</div><div class="value">${s.today}</div></div>
+        <div class="stat"><div class="label">This week</div><div class="value">${s.week}</div></div>
+        <div class="stat"><div class="label">Failed</div><div class="value" style="color:${s.failed?'var(--err)':'inherit'}">${s.failed}</div></div>
+        <div class="stat"><div class="label">Avg duration</div><div class="value">${fmtDuration(s.avgDurationMs)}</div></div>
+        <div class="stat"><div class="label">Disk usage</div><div class="value">${fmtBytes(s.diskBytes)}</div></div>
+    `;
+}
+
+async function loadJobs() {
+    const status = document.getElementById('filter-status').value;
+    const limit = document.getElementById('filter-limit').value;
+    const qs = new URLSearchParams({ limit }); if (status) qs.set('status', status);
+    const { jobs } = await api('/api/jobs?' + qs);
+    const body = document.getElementById('jobs-body');
+    if (!jobs.length) { body.innerHTML = '<tr><td colspan="9" class="empty">No jobs yet</td></tr>'; return; }
+    body.innerHTML = jobs.map(j => `
+        <tr>
+            <td>${fmtTime(j.createdAt)}</td>
+            <td class="url" title="${esc(j.url)}"><a href="${esc(j.url)}" target="_blank" style="color:var(--accent)">${esc(j.url)}</a></td>
+            <td class="muted">${(j.sections||[]).join(', ')}</td>
+            <td><span class="pill ${j.status}">${j.status}</span></td>
+            <td>${fmtDuration(j.durationMs||0)}</td>
+            <td>${fmtBytes(j.totalBytes||0)}</td>
+            <td><div class="thumbs">${(j.files||[]).filter(f=>f.url).map(f=>`<img src="${esc(f.url)}" title="${esc(f.section)}" onclick="openImg('${esc(f.url)}')">`).join('')}</div></td>
+            <td class="muted">${esc(j.clientIp||'-')}</td>
+            <td><div class="row-actions">
+                <button onclick="delJob('${esc(j.id)}')">Delete</button>
+            </div></td>
+        </tr>
+    `).join('');
+}
+
+function openImg(url) {
+    document.getElementById('modal-img').src = url;
+    document.getElementById('modal').classList.add('open');
+}
+
+async function delJob(id) {
+    if (!confirm('Delete this job and its files?')) return;
+    await api('/api/jobs/' + encodeURIComponent(id), { method: 'DELETE' });
+    refresh();
+}
+async function cleanup(days) {
+    if (!confirm(`Delete all jobs older than ${days} day(s)?`)) return;
+    const r = await api('/api/jobs/cleanup', { method: 'POST', body: JSON.stringify({ olderThanDays: days }) });
+    alert(`Deleted ${r.deleted} job(s)`);
+    refresh();
+}
+async function deleteAll() {
+    if (!confirm('Delete ALL jobs and screenshot files? This cannot be undone.')) return;
+    const r = await api('/api/jobs', { method: 'DELETE' });
+    alert(`Deleted ${r.deleted} job(s)`);
+    refresh();
+}
+async function refresh() { await Promise.all([loadStats(), loadJobs()]); }
+
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+// init
+(async () => {
+    if (!apiKey) { showLogin(); return; }
+    try { await api('/api/stats'); showApp(); refresh(); setInterval(refresh, 15000); }
+    catch { showLogin(); }
+})();
+</script>
+</body>
+</html>

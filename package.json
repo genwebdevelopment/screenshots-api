@@ -1,0 +1,16 @@
+{
+  "name": "screenshot-api",
+  "version": "1.0.0",
+  "description": "Standalone Puppeteer screenshot API for agents-dashboard WP plugin",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "p-limit": "^3.1.0",
+    "puppeteer": "^24.36.1"
+  }
+}
