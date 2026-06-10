@@ -69,7 +69,10 @@ async function capture({ url, sections = ['full'], viewport, waitTime = 3000, ti
         for (const key of sections) {
             if (key === 'full') {
                 const filename = 'full-page.png';
-                await page.screenshot({ path: path.join(outputDir, filename), fullPage: true });
+                // captureBeyondViewport:false makes Puppeteer resize the real viewport to the
+                // full page height and capture within it. The default (true) uses an off-screen
+                // surface that renders blank on some sites (e.g. animated/lazy pages like jovie.com).
+                await page.screenshot({ path: path.join(outputDir, filename), fullPage: true, captureBeyondViewport: false });
                 results.push({ section: 'full', filename });
                 continue;
             }
