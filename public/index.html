@@ -66,6 +66,19 @@
     .badge.get{background:rgba(34,197,94,.15);color:var(--ok)}
     .badge.post{background:rgba(56,189,248,.15);color:var(--accent)}
     .badge.del{background:rgba(239,68,68,.15);color:var(--err)}
+    .cmp-field{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12px}
+    .cmp-field select{min-width:260px}
+    .cmp-summary{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:16px 0;display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+    .cmp-summary .big{font-size:22px;font-weight:700}
+    .cmp-section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
+    .cmp-section h4{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:10px}
+    .cmp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .cmp-col{display:flex;flex-direction:column;gap:6px}
+    .cmp-col .cap{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+    .cmp-col img{width:100%;border:1px solid var(--border);border-radius:4px;background:#0b1220;cursor:pointer;max-height:420px;object-fit:contain;object-position:top}
+    .pill.changed{background:rgba(239,68,68,.15);color:var(--err)}
+    .pill.same{background:rgba(34,197,94,.15);color:var(--ok)}
+    .pill.warn{background:rgba(234,179,8,.15);color:#eab308}
 </style>
 </head>
 <body>
@@ -88,6 +101,7 @@
     <main>
         <nav class="tabs">
             <button class="tab active" data-tab="jobs" onclick="switchTab('jobs')">Jobs</button>
+            <button class="tab" data-tab="compare" onclick="switchTab('compare')">Compare</button>
             <button class="tab" data-tab="document" onclick="switchTab('document')">Document</button>
         </nav>
 
@@ -127,6 +141,26 @@
             </thead>
             <tbody id="jobs-body"></tbody>
         </table>
+        </section>
+
+        <section id="tab-compare" class="tab-panel">
+            <p class="muted" style="margin-top:0">Pick a <strong>before</strong> and an <strong>after</strong> capture of the same page. Matching sections are diffed pixel-by-pixel; changed areas are highlighted in red.</p>
+            <div class="toolbar">
+                <label class="cmp-field">Before
+                    <select id="cmp-before"></select>
+                </label>
+                <label class="cmp-field">After
+                    <select id="cmp-after"></select>
+                </label>
+                <label class="cmp-field">Sensitivity
+                    <input id="cmp-threshold" type="number" min="0" max="1" step="0.05" value="0.1" style="width:90px" title="pixelmatch threshold: 0 = strict, 1 = loose" />
+                </label>
+                <button class="primary" onclick="runCompare()">Run comparison</button>
+                <button onclick="loadCompareOptions()">↻ Reload jobs</button>
+            </div>
+            <div id="compare-result"></div>
+            <h3 style="margin-top:28px;color:var(--accent)">Saved comparisons</h3>
+            <div id="comparisons-list"></div>
         </section>
 
         <section id="tab-document" class="tab-panel">
@@ -189,6 +223,43 @@
                 <li><span class="badge post">POST</span> <code>/api/jobs/cleanup</code> — body <code>{ "olderThanDays": 7 }</code>, prunes old jobs.</li>
                 <li><span class="badge del">DELETE</span> <code>/api/jobs</code> — delete ALL jobs and files.</li>
             </ul>
+
+            <h3><span class="badge post">POST</span> /compare <span class="muted">(before/after visual diff)</span></h3>
+            <p>Diffs two existing jobs section-by-section (matched by section name) and stores the result. Body:</p>
+            <pre><code>{
+  "before": "&lt;jobId of the baseline capture&gt;",
+  "after":  "&lt;jobId of the new capture&gt;",
+  "threshold": 0.1   // optional, pixelmatch sensitivity 0 (strict) – 1 (loose)
+}</code></pre>
+            <p>For each section present in both jobs it writes a highlighted diff PNG and returns per-section stats:</p>
+            <pre><code>{
+  "id": "cmp-…",
+  "changedCount": 1,
+  "maxDiffPercent": 4.21,
+  "results": [
+    {
+      "section": "hero",
+      "status": "compared",
+      "changed": true,
+      "diffPercent": 4.21,
+      "sizeMismatch": false,
+      "beforeUrl": "https://host/files/&lt;before&gt;/hero.png",
+      "afterUrl":  "https://host/files/&lt;after&gt;/hero.png",
+      "diffUrl":   "https://host/files/cmp-…/hero-diff.png"
+    }
+  ]
+}</code></pre>
+            <p class="muted">A section is flagged <code>changed</code> when more than 0.1% of pixels differ (filtering antialiasing noise). If the before/after dimensions differ, both are padded to a common size and <code>sizeMismatch</code> is set. Use the <strong>Compare</strong> tab in this dashboard to run and review diffs visually.</p>
+            <ul>
+                <li><span class="badge get">GET</span> <code>/api/comparisons?limit=&amp;offset=</code> — list saved comparisons.</li>
+                <li><span class="badge get">GET</span> <code>/api/comparisons/:id</code> — a single comparison.</li>
+                <li><span class="badge del">DELETE</span> <code>/api/comparisons/:id</code> — delete a comparison and its diff images.</li>
+            </ul>
+
+            <h3>Capture stability (for reliable diffs)</h3>
+            <p>To keep before/after captures comparable, every capture now: waits for network idle and web fonts, disables CSS animations/transitions and smooth-scroll, and auto-scrolls to trigger lazy-loaded images. You can also blank out volatile regions (dates, ads, cookie bars) per request:</p>
+            <pre><code>{ "url": "https://example.com", "sections": ["full"],
+  "hide": [".cookie-banner", "#live-chat", ".timestamp"] }</code></pre>
 
             <h2>Sections we capture</h2>
             <p>The <code>sections</code> array picks what to grab. Each maps to a capture strategy in <code>src/screenshot.js</code>:</p>
@@ -364,6 +435,104 @@ async function refresh() { await Promise.all([loadStats(), loadJobs()]); }
 function switchTab(name) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+    if (name === 'compare') { loadCompareOptions(); loadComparisons(); }
+}
+
+// ---------- Compare (before/after visual diff) ----------
+
+let _compareJobs = [];
+
+async function loadCompareOptions() {
+    const { jobs } = await api('/api/jobs?limit=250&status=success');
+    _compareJobs = jobs.filter(j => (j.files || []).some(f => f.url));
+    const opt = j => `<option value="${esc(j.id)}">${fmtTime(j.createdAt)} — ${esc(j.url)}</option>`;
+    const html = _compareJobs.map(opt).join('');
+    const before = document.getElementById('cmp-before');
+    const after = document.getElementById('cmp-after');
+    before.innerHTML = '<option value="">Select before…</option>' + html;
+    after.innerHTML = '<option value="">Select after…</option>' + html;
+    if (_compareJobs.length >= 2) {
+        // Default: oldest selectable as "before", newest as "after".
+        after.value = _compareJobs[0].id;
+        before.value = _compareJobs[_compareJobs.length - 1].id;
+    }
+}
+
+async function runCompare() {
+    const before = document.getElementById('cmp-before').value;
+    const after = document.getElementById('cmp-after').value;
+    const threshold = parseFloat(document.getElementById('cmp-threshold').value) || 0.1;
+    const target = document.getElementById('compare-result');
+    if (!before || !after) { target.innerHTML = '<p class="muted">Pick both a before and an after capture.</p>'; return; }
+    if (before === after) { target.innerHTML = '<p class="muted">Before and after are the same job — pick two different captures.</p>'; return; }
+    target.innerHTML = '<p class="muted">Comparing…</p>';
+    try {
+        const c = await api('/compare', { method: 'POST', body: JSON.stringify({ before, after, threshold }) });
+        target.innerHTML = renderComparison(c);
+        loadComparisons();
+    } catch (e) {
+        target.innerHTML = '<p class="muted" style="color:var(--err)">Comparison failed.</p>';
+    }
+}
+
+function renderComparison(c) {
+    const sections = (c.results || []).map(r => {
+        if (r.status !== 'compared') {
+            return `<div class="cmp-section"><h4>${esc(r.section)} <span class="pill warn">${esc(r.status)}</span></h4>
+                <p class="muted">${esc(r.error || 'No matching image in both captures.')}</p></div>`;
+        }
+        const pill = r.changed ? `<span class="pill changed">changed ${r.diffPercent}%</span>` : `<span class="pill same">unchanged</span>`;
+        const sizeWarn = r.sizeMismatch ? ` <span class="pill warn" title="Before ${r.dimsBefore.width}×${r.dimsBefore.height}, after ${r.dimsAfter.width}×${r.dimsAfter.height}">size changed</span>` : '';
+        return `<div class="cmp-section">
+            <h4>${esc(r.section)} ${pill}${sizeWarn}</h4>
+            <div class="cmp-grid">
+                <div class="cmp-col"><span class="cap">Before</span><img src="${esc(r.beforeUrl)}" onclick="openImg('${esc(r.beforeUrl)}')"></div>
+                <div class="cmp-col"><span class="cap">After</span><img src="${esc(r.afterUrl)}" onclick="openImg('${esc(r.afterUrl)}')"></div>
+                <div class="cmp-col"><span class="cap">Diff</span><img src="${esc(r.diffUrl)}" onclick="openImg('${esc(r.diffUrl)}')"></div>
+            </div></div>`;
+    }).join('');
+    const verdict = c.changedCount > 0
+        ? `<span class="pill changed">${c.changedCount} section(s) changed</span>`
+        : `<span class="pill same">no changes detected</span>`;
+    return `<div class="cmp-summary">
+            <div>${verdict}</div>
+            <div><div class="cap" style="color:var(--muted);font-size:11px">Max difference</div><div class="big">${c.maxDiffPercent}%</div></div>
+            <div><div class="cap" style="color:var(--muted);font-size:11px">Sections compared</div><div class="big">${c.comparedCount}</div></div>
+            <div class="muted">${fmtTime(c.createdAt)}</div>
+        </div>${sections}`;
+}
+
+async function loadComparisons() {
+    const { comparisons } = await api('/api/comparisons?limit=100');
+    const el = document.getElementById('comparisons-list');
+    if (!comparisons.length) { el.innerHTML = '<p class="empty">No comparisons yet</p>'; return; }
+    el.innerHTML = `<table><thead><tr><th>Time</th><th>Page</th><th>Result</th><th>Max diff</th><th>Actions</th></tr></thead><tbody>${
+        comparisons.map(c => {
+            const verdict = c.changedCount > 0 ? `<span class="pill changed">${c.changedCount} changed</span>` : `<span class="pill same">unchanged</span>`;
+            return `<tr>
+                <td>${fmtTime(c.createdAt)}</td>
+                <td class="url" title="${esc(c.beforeUrl)}">${esc(c.beforeUrl || '-')}</td>
+                <td>${verdict}</td>
+                <td>${c.maxDiffPercent}%</td>
+                <td><div class="row-actions">
+                    <button onclick="viewComparison('${esc(c.id)}')">View</button>
+                    <button class="danger" onclick="delComparison('${esc(c.id)}')">Delete</button>
+                </div></td>
+            </tr>`;
+        }).join('')
+    }</tbody></table>`;
+}
+
+async function viewComparison(id) {
+    const c = await api('/api/comparisons/' + encodeURIComponent(id));
+    document.getElementById('compare-result').innerHTML = renderComparison(c);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function delComparison(id) {
+    if (!confirm('Delete this comparison and its diff images?')) return;
+    await api('/api/comparisons/' + encodeURIComponent(id), { method: 'DELETE' });
+    loadComparisons();
 }
 
 // init

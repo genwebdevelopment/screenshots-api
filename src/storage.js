@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 
 class JobStore {
-    constructor(dir) {
+    constructor(dir, filename = 'jobs.json') {
         this.dir = dir;
-        this.file = path.join(dir, 'jobs.json');
+        this.file = path.join(dir, filename);
         fs.mkdirSync(dir, { recursive: true });
         if (!fs.existsSync(this.file)) {
             fs.writeFileSync(this.file, '[]');
