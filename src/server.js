@@ -271,7 +271,7 @@ app.post('/compare', auth, (req, res) => {
 // locally and just wants them compared. `threshold` is pixelmatch's per-pixel
 // sensitivity (0 strict – 1 loose); `changedRatio` overrides the changed cutoff.
 app.post('/diff', auth, express.json({ limit: DIFF_BODY_LIMIT }), (req, res) => {
-    const { before, after, threshold, changedRatio } = req.body || {};
+    const { before, after, threshold, changedRatio, saveDiffImage } = req.body || {};
     if (typeof before !== 'string' || typeof after !== 'string' || !before || !after) {
         return res.status(400).json({ error: 'before_and_after_required' });
     }
@@ -288,12 +288,21 @@ app.post('/diff', auth, express.json({ limit: DIFF_BODY_LIMIT }), (req, res) => 
     const thr = Math.min(Math.max(parseFloat(threshold), 0), 1) || 0.1;
     const changedCut = Number.isFinite(parseFloat(changedRatio)) ? parseFloat(changedRatio) : CHANGED_RATIO;
     const diffId = 'diff-' + crypto.randomBytes(8).toString('hex');
+
+    // The diff image is opt-in: the plugin highlights changed regions on both
+    // panes itself and doesn't need it, so by default we skip writing it (the
+    // regions are all the caller needs) to avoid leaking diff-*/ folders on disk.
+    const wantImage = !!saveDiffImage;
     const outDir = path.join(SCREENSHOT_DIR, diffId);
+    const diffName = 'diff.png';
+    let outPath = null;
 
     try {
-        fs.mkdirSync(outDir, { recursive: true });
-        const diffName = 'diff.png';
-        const stat = compareBuffers(bufBefore, bufAfter, path.join(outDir, diffName), {
+        if (wantImage) {
+            fs.mkdirSync(outDir, { recursive: true });
+            outPath = path.join(outDir, diffName);
+        }
+        const stat = compareBuffers(bufBefore, bufAfter, outPath, {
             threshold: thr,
             withRegions: true,
         });
@@ -310,13 +319,13 @@ app.post('/diff', auth, express.json({ limit: DIFF_BODY_LIMIT }), (req, res) => 
             dimsBefore: stat.dimsBefore,
             dimsAfter: stat.dimsAfter,
             regions: stat.regions || [],
-            diffUrl: fileUrl(diffId, diffName),
+            diffUrl: wantImage ? fileUrl(diffId, diffName) : null,
         };
         comparisons.add(record);
         res.json(record);
     } catch (err) {
         console.error('diff error:', err);
-        rmRecursive(outDir);
+        if (wantImage) rmRecursive(outDir);
         res.status(500).json({ error: 'diff_failed', message: err.message });
     }
 });

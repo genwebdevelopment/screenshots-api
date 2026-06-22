@@ -51,6 +51,49 @@ Response:
 ### `GET /files/:jobId/:filename`
 Static access to captured PNGs.
 
+### `POST /diff` (requires `x-api-key` header)
+
+Stateless visual comparison of two PNGs. The caller (the WP plugin) already
+holds the previous and latest screenshots locally, so it uploads both as base64
+and gets back a full-resolution `pixelmatch` diff. Unlike `/compare`, no prior
+job is needed.
+
+Body:
+```json
+{
+  "before": "<base64 PNG>",
+  "after":  "<base64 PNG>",
+  "threshold": 0.1,
+  "changedRatio": 0.02,
+  "saveDiffImage": false
+}
+```
+- `threshold` — pixelmatch per-pixel sensitivity, 0 (strict) – 1 (loose). Default `0.1`.
+- `changedRatio` — fraction of differing pixels above which `changed` is true. Default `0.001`.
+- `saveDiffImage` — when `true`, writes a red-highlighted diff PNG and returns its URL. Default `false` (the plugin highlights regions itself, so skipping the write avoids leaking `diff-*/` folders on disk).
+
+Response:
+```json
+{
+  "id": "diff-…",
+  "changed": true,
+  "diffPercent": 25.885,
+  "diffPixels": 12867099,
+  "totalPixels": 49708800,
+  "sizeMismatch": true,
+  "dimsBefore": { "width": 1920, "height": 16440 },
+  "dimsAfter":  { "width": 1920, "height": 25890 },
+  "regions": [ { "top": 626, "left": 60, "width": 1800, "height": 400, "changedPixels": 428606 } ],
+  "diffUrl": null
+}
+```
+`regions` are bounding bands of changed pixels in the common (max-of-both) image
+space; the plugin converts them to per-pane percentages to box the change on
+both the Previous and Latest screenshots.
+
+Both captures are padded to a common size before diffing, so a height change
+(e.g. the page grew) surfaces as changed pixels rather than an error.
+
 ## Hostinger VPS deployment
 
 1. **Pick VPS plan with ≥2GB RAM** (Chrome is memory-hungry).
