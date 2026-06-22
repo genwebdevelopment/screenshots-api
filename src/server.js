@@ -7,7 +7,7 @@ const pLimit = require('p-limit');
 const { capture } = require('./screenshot');
 const { closeBrowser } = require('./browser');
 const { JobStore } = require('./storage');
-const { compareFiles } = require('./diff');
+const { compareFiles, compareBuffers } = require('./diff');
 const { dirSize, rmRecursive } = require('./util');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -33,8 +33,17 @@ const limit = pLimit(MAX_CONCURRENCY);
 // A section counts as "changed" once more than this fraction of pixels differ,
 // filtering out sub-pixel antialiasing noise.
 const CHANGED_RATIO = 0.001;
+// Max base64 image payload for /diff. Full-page PNGs run large (a 1920×26000
+// shot is ~16 MB raw → ~22 MB base64), and /diff carries two of them.
+const DIFF_BODY_LIMIT = process.env.DIFF_BODY_LIMIT || '80mb';
 const app = express();
-app.use(express.json({ limit: '100kb' }));
+// Most routes take tiny JSON bodies; keep them capped at 100kb. /diff is the one
+// exception — it receives two base64-encoded screenshots, so it gets its own
+// large-limit parser mounted directly on the route below.
+app.use((req, res, next) => {
+    if (req.path === '/diff') return next();
+    express.json({ limit: '100kb' })(req, res, next);
+});
 
 function auth(req, res, next) {
     const key = req.header('x-api-key') || req.query.api_key;
@@ -252,6 +261,64 @@ app.post('/compare', auth, (req, res) => {
     };
     comparisons.add(record);
     res.json(record);
+});
+
+// Stateless diff: the caller uploads two PNGs (base64) and gets back the exact
+// pixelmatch diff %, a red-highlighted diff image, and the changed regions.
+//
+// Unlike /compare (which diffs two stored JOBS by id), /diff needs no prior job
+// — the WP plugin already holds both the "previous" and "latest" screenshots
+// locally and just wants them compared. `threshold` is pixelmatch's per-pixel
+// sensitivity (0 strict – 1 loose); `changedRatio` overrides the changed cutoff.
+app.post('/diff', auth, express.json({ limit: DIFF_BODY_LIMIT }), (req, res) => {
+    const { before, after, threshold, changedRatio } = req.body || {};
+    if (typeof before !== 'string' || typeof after !== 'string' || !before || !after) {
+        return res.status(400).json({ error: 'before_and_after_required' });
+    }
+
+    let bufBefore;
+    let bufAfter;
+    try {
+        bufBefore = Buffer.from(before, 'base64');
+        bufAfter = Buffer.from(after, 'base64');
+    } catch (e) {
+        return res.status(400).json({ error: 'invalid_base64' });
+    }
+
+    const thr = Math.min(Math.max(parseFloat(threshold), 0), 1) || 0.1;
+    const changedCut = Number.isFinite(parseFloat(changedRatio)) ? parseFloat(changedRatio) : CHANGED_RATIO;
+    const diffId = 'diff-' + crypto.randomBytes(8).toString('hex');
+    const outDir = path.join(SCREENSHOT_DIR, diffId);
+
+    try {
+        fs.mkdirSync(outDir, { recursive: true });
+        const diffName = 'diff.png';
+        const stat = compareBuffers(bufBefore, bufAfter, path.join(outDir, diffName), {
+            threshold: thr,
+            withRegions: true,
+        });
+        const changed = stat.diffRatio > changedCut;
+        const record = {
+            id: diffId,
+            createdAt: new Date().toISOString(),
+            threshold: thr,
+            changed,
+            diffPercent: stat.diffPercent,
+            diffPixels: stat.diffPixels,
+            totalPixels: stat.totalPixels,
+            sizeMismatch: stat.sizeMismatch,
+            dimsBefore: stat.dimsBefore,
+            dimsAfter: stat.dimsAfter,
+            regions: stat.regions || [],
+            diffUrl: fileUrl(diffId, diffName),
+        };
+        comparisons.add(record);
+        res.json(record);
+    } catch (err) {
+        console.error('diff error:', err);
+        rmRecursive(outDir);
+        res.status(500).json({ error: 'diff_failed', message: err.message });
+    }
 });
 
 app.get('/api/comparisons', auth, (req, res) => {
