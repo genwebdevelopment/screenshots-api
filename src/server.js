@@ -306,7 +306,11 @@ app.post('/diff', auth, express.json({ limit: DIFF_BODY_LIMIT }), (req, res) => 
             threshold: thr,
             withRegions: true,
         });
-        const changed = stat.diffRatio > changedCut;
+        // Changed is driven by detected regions (noise-filtered bands), so a
+        // small localized edit on a tall page is caught even though its share
+        // of total pixels is well under changedCut. The ratio is a secondary
+        // signal for changes too diffuse to band.
+        const changed = (Array.isArray(stat.regions) && stat.regions.length > 0) || stat.diffRatio > changedCut;
         const record = {
             id: diffId,
             createdAt: new Date().toISOString(),
