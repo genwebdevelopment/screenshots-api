@@ -72,8 +72,16 @@ async function capture({ url, sections = ['full'], viewport, waitTime = 3000, ti
                 // captureBeyondViewport:false makes Puppeteer resize the real viewport to the
                 // full page height and capture within it. The default (true) uses an off-screen
                 // surface that renders blank on some sites (e.g. animated/lazy pages like jovie.com).
-                await page.screenshot({ path: path.join(outputDir, filename), fullPage: true, captureBeyondViewport: false });
-                results.push({ section: 'full', filename });
+                //
+                // Wrapped like the per-section captures below: an unguarded throw here aborted
+                // the whole job, so a very tall page (jovie.com/blog/ renders ~18,800px) took
+                // every other requested section down with it and surfaced no reason at all.
+                try {
+                    await page.screenshot({ path: path.join(outputDir, filename), fullPage: true, captureBeyondViewport: false });
+                    results.push({ section: 'full', filename });
+                } catch (err) {
+                    results.push({ section: 'full', error: err.message });
+                }
                 continue;
             }
 

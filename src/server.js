@@ -94,12 +94,30 @@ app.post('/screenshot', auth, async (req, res) => {
         }));
 
         const successCount = files.filter((f) => f.filename).length;
+
+        // A capture can come back without throwing and still produce no image —
+        // a section selector that matched nothing, or a per-section screenshot
+        // error. That was recorded as status:'failed' with no reason at all, so
+        // the dashboard showed a bare red pill and the cause was unrecoverable.
+        // Carry the per-section errors up to the job so the row can explain
+        // itself. Only the thrown-exception path used to set `error`.
+        const sectionErrors = files
+            .filter((f) => f.error)
+            .map((f) => `${f.section}: ${f.error}`);
+        const failureReason = successCount > 0
+            ? undefined
+            : (sectionErrors.join('; ') || 'no_files_captured');
+
         const entry = {
             id: result.jobId,
             url,
             sections: requestedSections,
             viewport: viewport || null,
             status: successCount > 0 ? 'success' : 'failed',
+            error: failureReason,
+            // Section-level detail is kept even on a partial success, so a job
+            // that captured 2 of 3 sections can still say what the third did.
+            sectionErrors: sectionErrors.length ? sectionErrors : undefined,
             createdAt: new Date(startedAt).toISOString(),
             durationMs: Date.now() - startedAt,
             fileCount: successCount,
