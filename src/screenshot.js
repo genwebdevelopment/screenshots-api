@@ -121,6 +121,12 @@ async function capture({ url, sections = ['full'], viewport, waitTime = 3000, ti
         }
 
         return { jobId, outputDir, results };
+    } catch (err) {
+        // A thrown error (e.g. the goto() timeout below) would otherwise reach
+        // server.js with no way to know which job/folder it belonged to — the
+        // caller then can't ever delete it, and it leaks on disk forever.
+        err.jobId = jobId;
+        throw err;
     } finally {
         await page.close().catch(() => {});
     }
