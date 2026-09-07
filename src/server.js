@@ -130,8 +130,13 @@ app.post('/screenshot', auth, async (req, res) => {
         res.json({ jobId: result.jobId, files });
     } catch (err) {
         console.error('screenshot error:', err);
+        // Use the same jobId capture() assigned its output folder (when it got
+        // that far) so a later DELETE /api/jobs/{id} actually finds and removes
+        // it, instead of the store entry and the on-disk folder using two
+        // different ids that neither cleanup path can link back together.
+        const failedId = err.jobId || ('err-' + Date.now().toString(36));
         store.add({
-            id: 'err-' + Date.now().toString(36),
+            id: failedId,
             url,
             sections: requestedSections,
             status: 'failed',
@@ -141,7 +146,9 @@ app.post('/screenshot', auth, async (req, res) => {
             clientIp,
             files: [],
         });
-        res.status(500).json({ error: 'capture_failed', message: err.message });
+        // jobId is included so callers (the WP plugin) can record it against
+        // the report and delete this job later instead of it being orphaned.
+        res.status(500).json({ error: 'capture_failed', message: err.message, jobId: failedId });
     }
 });
 
