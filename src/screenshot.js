@@ -45,6 +45,14 @@ async function capture({ url, sections = ['full'], viewport, waitTime = 3000, ti
     const vp = { width: 1920, height: 1080, deviceScaleFactor: 1, ...(viewport || {}) };
     const browser = await getBrowser();
     const page = await browser.newPage();
+    // Page is an EventEmitter; when its renderer crashes (e.g. rendering a
+    // very tall full-page screenshot under memory pressure) it emits 'error'.
+    // With no listener, Node throws that as an uncaught exception and kills
+    // the ENTIRE process — not just this request — which is what was taking
+    // the whole API down (Cloudflare 502) until pm2 restarted it.
+    page.on('error', (err) => {
+        console.error('Page crashed during capture (' + jobId + '):', err.message);
+    });
     const results = [];
 
     try {
