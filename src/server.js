@@ -391,3 +391,16 @@ async function shutdown(signal) {
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// Last-resort safety net: log what actually killed the process before pm2
+// silently restarts it. Without this, a crash (like the unhandled Page
+// 'error' event that used to take the whole API down) left no trace at all,
+// only the gap in the dashboard and a Cloudflare 502.
+process.on('uncaughtException', (err) => {
+    console.error('uncaughtException:', err);
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('unhandledRejection:', reason);
+    process.exit(1);
+});
