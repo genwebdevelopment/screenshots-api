@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { getBrowser } = require('./browser');
+const { getPage } = require('./browser');
 
 const SELECTORS = {
     hero: { viewportCapture: true, scrollTo: 0, clipHeight: 900, name: 'Hero Section' },
@@ -43,8 +43,10 @@ async function capture({ url, sections = ['full'], viewport, waitTime = 3000, ti
     fs.mkdirSync(outputDir, { recursive: true });
 
     const vp = { width: 1920, height: 1080, deviceScaleFactor: 1, ...(viewport || {}) };
-    const browser = await getBrowser();
-    const page = await browser.newPage();
+    const page = await getPage().catch((err) => {
+        err.jobId = jobId;
+        throw err;
+    });
     // Page is an EventEmitter; when its renderer crashes (e.g. rendering a
     // very tall full-page screenshot under memory pressure) it emits 'error'.
     // With no listener, Node throws that as an uncaught exception and kills
